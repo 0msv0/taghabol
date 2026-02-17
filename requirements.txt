@@ -112,3 +112,5 @@ websocket-client==1.8.0
 widgetsnbextension==4.0.13
 zope.event==5.0
 zope.interface==7.2
+plotly==5.22.0
+
