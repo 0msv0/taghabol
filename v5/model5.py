@@ -990,8 +990,8 @@ class MultiAgentWorld:
         if interaction_W is None:
             # اگر ماتریس تعامل داده نشد:
 
-            W = np.ones((n, n), dtype=float)
-            # یک ماتریس n×n از 1 می‌سازیم یعنی همه با همه تعامل دارند.
+            W = np.zeros((n, n), dtype=float)
+            # پیش‌فرض: رابطه خنثی (۰) بین همه.
 
             np.fill_diagonal(W, 0.0)
             # قطر اصلی صفر می‌شود چون کشور نباید خودش را هدف بگیرد.
@@ -1005,18 +1005,41 @@ class MultiAgentWorld:
             W = np.array(interaction_W, dtype=float)
             # تبدیل به آرایه numpy برای محاسبات و انتخاب هدف.
 
+            W = np.clip(W, -1.0, 1.0)
+            # از این نسخه به بعد W بازه [-1,+1] دارد:
+            # -1 = بیشترین تقابل (هدف‌گیری بیشتر)
+            # +1 = بیشترین همسویی (هدف‌گیری کمتر)
+
             np.fill_diagonal(W, 0.0)
             # تضمین اینکه قطر اصلی صفر باشد (حتی اگر کاربر اشتباه داده باشد).
 
             self.W = W
             # ذخیره ماتریس.
 
+    @staticmethod
+    def _w_signed_to_weight01(w_signed: float) -> float:
+        """Convert signed W in [-1,+1] to a nonnegative weight in [0,1].
+
+        -1 (تقابل شدید)  -> 1.0  (هدف‌گیری زیاد)
+         0 (خنثی)        -> 0.5
+        +1 (همسویی)      -> 0.0  (هدف‌گیری کم)
+        """
+        w = float(w_signed)
+        w01 = (1.0 - w) / 2.0
+        return float(np.clip(w01, 0.0, 1.0))
+
     def _pick_target(self, i: int) -> int:
         # این تابع برای کشور i یک هدف j انتخاب می‌کند.
-        # انتخاب بر اساس توزیع احتمالی ساخته‌شده از ردیف W[i].
+        # W امضادار است ([-1,+1]) و برای انتخاب هدف به وزن [0,1] تبدیل می‌شود.
 
-        w = self.W[i].copy()
-        # یک کپی از وزن‌های تعامل i با همه j ها می‌گیریم.
+        w_signed = self.W[i].copy()
+        # یک کپی از رابطه‌های i با همه j ها
+
+        w = (1.0 - w_signed) / 2.0
+        # نگاشت: -1→1 ، +1→0
+
+        w[i] = 0.0
+        w = np.clip(w, 0.0, 1.0)
 
         if w.sum() <= 1e-12:
             # اگر کل وزن‌ها تقریباً صفر بود (یعنی کاربر همه صفر داده):
@@ -1089,7 +1112,7 @@ class MultiAgentWorld:
         - It is a dynamic, time-indexed dyadic signal derived from the same
           Bernoulli-Logit form used for ψ_ij in the model.
         """
-        w_ij = float(max(0.0, min(1.0, float(w_ij))))
+        w_ij = self._w_signed_to_weight01(w_ij)
         base = (
                 (self.esc.eta1 * float(psi_i))
                 + (self.esc.eta2 * float(psi_j))
@@ -1223,11 +1246,11 @@ class MultiAgentWorld:
             psi_j = psi_list[j]
             # ψ کشور j (هدف).
 
-            w_ij = float(self.W[i, j])
-            # وزن تعامل i با j از ماتریس W.
+            w_ij_signed = float(self.W[i, j])
+            # رابطه i با j از ماتریس W (امضادار [-1,+1]).
 
-            w_ij = max(0.0, min(1.0, w_ij))
-            # محدود کردن به بازه [0,1] برای اینکه اثر تعامل کنترل‌شده باشد.
+            w_ij = self._w_signed_to_weight01(w_ij_signed)
+            # تبدیل برای استفاده در ψ_ij (بازه 0..1)
 
             base = (self.esc.eta1 * psi_i) + (self.esc.eta2 * psi_j) + (
                         self.esc.eta3 * psi_i * psi_j) + self.esc.eta_bias

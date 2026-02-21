@@ -14,7 +14,6 @@ from model5 import (
     EscalationCoeffs,
 )
 
-
 # ==============================================
 # Tooltip texts (دو خطی و خیلی ساده)
 # ==============================================
@@ -49,7 +48,7 @@ TOOLTIPS = {
     # عملیاتی
     "lambda_op": "توان عملیاتی برای اجرای تصمیم‌ها.\nبالاتر یعنی ظرفیت عمل بیشتر.",
     "tau_c": "تمپو/سرعت ریتم اقدام‌ها.\nبالاتر یعنی کشور سریع‌تر عمل می‌کند.",
-    "eps_c": "آستانه بسیج.\nپایین‌تر یعنی زودتر وارد حالت بسیج می‌شود.",
+    "eps_c": "حد شروع واکنش شدید.\nپایین‌تر یعنی زودتر وارد حالت بسیج می‌شود.",
 
     # فنی
     "eta_c": "توان فنی و کیفیت اجرا.\nبالاتر یعنی اقدام‌ها مؤثرتر اجرا می‌شوند.",
@@ -61,7 +60,7 @@ TOOLTIPS = {
 
     # تاکتیکی
     "beta_c": "حساسیت به تفاوت منفعت.\nبالاتر یعنی تغییرات کوچک سریع اثر می‌گذارد.",
-    "prefP": "گرایش ذاتی به گشت‌زنی (P).\nبالاتر یعنی P بیشتر انتخاب می‌شود.",
+    "prefP": "گرایش ذاتی به آگاهی وضعیتی (P).\nبالاتر یعنی P بیشتر انتخاب می‌شود.",
     "prefS": "گرایش ذاتی به سیگنال (S).\nبالاتر یعنی S بیشتر انتخاب می‌شود.",
     "prefR": "گرایش ذاتی به تقویت/زور (R).\nبالاتر یعنی R بیشتر انتخاب می‌شود.",
 
@@ -80,13 +79,42 @@ TOOLTIPS = {
 
 }
 
+
 def tip(key: str) -> str:
     return TOOLTIPS.get(key, "")
+
+
+# ==========================================================
+# Scenario-change reset (wipe session_state keys on scenario switch)
+# ==========================================================
+def _reset_on_scenario_change(new_choice: str):
+    prev = st.session_state.get("_prev_scenario_choice", None)
+    if prev is None:
+        st.session_state["_prev_scenario_choice"] = new_choice
+        return
+
+    if prev == new_choice:
+        return
+
+    # --- keys to keep (minimal) ---
+    keep = {"_prev_scenario_choice", "scenario_choice"}
+
+    # Remove everything else (widgets + caches) so UI fully refreshes
+    for k in list(st.session_state.keys()):
+        if k not in keep:
+            try:
+                del st.session_state[k]
+            except Exception:
+                pass
+
+    st.session_state["_prev_scenario_choice"] = new_choice
+    st.rerun()
+
 
 # ==========================================================
 # 0) Helpers
 # ==========================================================
-ACTION_LABEL_FA = {"P": "گشت‌زنی (P)", "S": "سیگنال (S)", "R": "تقویت/زور (R)"}
+ACTION_LABEL_FA = {"P": "آگاهی وضعیتی (P)", "S": "سیگنال (S)", "R": "تقویت/زور (R)"}
 SECTION_ORDER = ["دکترین", "راهبرد", "تکنیک", "تاکتیک", "وضعیت"]
 
 
@@ -106,6 +134,12 @@ def normalize_weights(x1: float, x2: float, x3: float):
 def scenario_pack():
     scenarios = {}
 
+    def _W01_to_signed(W01):
+        W = np.array(W01, dtype=float)
+        W = 1.0 - 2.0 * W  # 0..1 → +1..-1
+        np.fill_diagonal(W, 0.0)
+        return W.tolist()
+
     scenarios["scenario_1"] = {
         "title": "سناریو ۱: بحران دریایی و رقابت بازدارندگی",
         "countries": ["آرمینیا", "نرمان", "جلال"],
@@ -121,11 +155,11 @@ def scenario_pack():
 - منابع همیشه افزایش پیدا نمی‌کند (هزینه اقدام واقعی است).
 - تعاملات جهت‌دار هستند (هر کشور هدف مشخص دارد).
 """,
-        "W": [
+        "W": _W01_to_signed([
             [0.0, 0.70, 0.30],
             [0.55, 0.0, 0.45],
             [0.35, 0.65, 0.0],
-        ],
+        ]),
         "agents": [
             dict(
                 name="آرمینیا",
@@ -190,11 +224,11 @@ def scenario_pack():
 الفا و بتا متحدند و بیشتر P/S انجام می‌دهند تا گاما را مهار کنند.  
 گاما گاهی R می‌کند و منابعش سریع‌تر کم می‌شود.
 """,
-        "W": [
+        "W": _W01_to_signed([
             [0.0, 0.20, 0.80],
             [0.20, 0.0, 0.80],
             [0.60, 0.40, 0.0],
-        ],
+        ]),
         "agents": [
             dict(
                 name="الفا", res0=1300, v=0.52, rho=0.40, d=0.62, f=0.50, chi=1.00,
@@ -225,11 +259,11 @@ def scenario_pack():
 **داستان سناریو:**
 کشورها بیشتر با **سیگنال (S)** رقابت می‌کنند و R کمتر رخ می‌دهد مگر تنش بالا برود.
 """,
-        "W": [
+        "W": _W01_to_signed([
             [0.0, 0.55, 0.45],
             [0.40, 0.0, 0.60],
             [0.60, 0.40, 0.0],
-        ],
+        ]),
         "agents": [
             dict(
                 name="دلتا", res0=1150, v=0.60, rho=0.40, d=0.82, f=0.40, chi=0.95,
@@ -261,10 +295,10 @@ def scenario_pack():
 دو کشور هم‌مرز هستند.
 آتا بیشتر با S بازدارندگی می‌سازد. بتا گاهی R می‌کند و منابعش سریع‌تر کم می‌شود.
 """,
-        "W": [
+        "W": _W01_to_signed([
             [0.0, 1.0],
             [1.0, 0.0],
-        ],
+        ]),
         "agents": [
             dict(
                 name="آتا", res0=1200, v=0.68, rho=0.38, d=0.80, f=0.45, chi=1.00,
@@ -290,7 +324,7 @@ def scenario_pack():
     **داستان سناریو (۵ کشور):**
     یک تنگه‌ی تجاری حیاتی وجود دارد که عبور انرژی و کالا از آن انجام می‌شود. پنج کشور فرضی درگیر رقابت و بازدارندگی‌اند:
 
-    - **اوران**: قدرت دریایی و امنیت‌محور است؛ بیشتر به **گشت‌زنی (P)** تکیه می‌کند تا مسیرها را امن نگه دارد.
+    - **اوران**: قدرت دریایی و امنیت‌محور است؛ بیشتر به **آگاهی وضعیتی (P)** تکیه می‌کند تا مسیرها را امن نگه دارد.
     - **سَحَر**: جنگ روانی و رسانه‌ای قوی دارد؛ بیشتر **سیگنال (S)** می‌دهد تا نفوذ بسازد.
     - **کایان**: کشوری پرریسک‌تر و تهاجمی‌تر است؛ گاهی سراغ **تقویت/زور (R)** می‌رود و هزینه‌اش را می‌پردازد.
     - **مِهران**: میانجی‌گر و محافظه‌کار است؛ ترکیبی از **P و S** انجام می‌دهد و کمتر دنبال R می‌رود.
@@ -310,14 +344,14 @@ def scenario_pack():
       - **اگر Y=0** باشد یال کم‌رنگ و خط‌چین است.
     """,
         # W[i][j] = شدت تعامل/احتمال هدف‌گیری j توسط i (قطر اصلی باید 0 باشد)
-        "W": [
+        "W": _W01_to_signed([
             #          اوران  سحر   کایان  مهران  وستا
             [0.0, 0.15, 0.45, 0.25, 0.15],  # اوران بیشتر کایان و مهران را زیرنظر دارد
             [0.20, 0.0, 0.35, 0.10, 0.35],  # سحر بیشتر روی کایان و وستا سیگنال می‌دهد
             [0.35, 0.10, 0.0, 0.10, 0.45],  # کایان بیشتر اوران و وستا را هدف می‌گیرد
             [0.30, 0.15, 0.25, 0.0, 0.30],  # مهران متعادل و میانجی: با همه تعامل دارد
             [0.25, 0.10, 0.45, 0.20, 0.0],  # وستا حساس به کایان و تا حدی اوران
-        ],
+        ]),
         "agents": [
             dict(
                 name="اوران",
@@ -383,23 +417,129 @@ def scenario_pack():
         "steps_default": 85,
     }
 
+    scenarios["scenario_6"] = {
+        "title": "سناریو ۶: رقابت و بازدارندگی قدرت‌های بزرگ (ایران/اسرائیل/آمریکا/چین/روسیه)",
+        "countries": ["ایران", "اسرائیل", "آمریکا", "چین", "روسیه"],
+        "story": """
+**داستان سناریو:**
+پنج بازیگر مهم با مجموعه‌ای از تقابل‌ها و همسویی‌ها همزمان در یک محیط پرتنش حضور دارند.
+
+- **ایران** بیشترین تقابل را با **اسرائیل** و **آمریکا** دارد و در عین حال با **چین** و **روسیه** همسویی نسبی دارد.
+- **اسرائیل** همسویی بالایی با **آمریکا** دارد و با **ایران** در تقابل شدید است.
+- **آمریکا** با **چین** و **روسیه** رقابت جدی دارد و در مقابل **اسرائیل** همسو است.
+- **چین** و **روسیه** تا حدی همسو هستند ولی هر کدام رقابت خود را با آمریکا دارند.
+
+**معنای W:**
+اعداد بین **-۱ تا +۱** هستند: **-۱ یعنی بیشترین تقابل** و **+۱ یعنی بیشترین همسویی**.
+""",
+        "W": [
+            #            ایران  اسرائیل  آمریکا   چین   روسیه
+            [0.0, -0.90, -0.80, 0.45, 0.30],  # ایران
+            [-0.85, 0.0, 0.80, -0.20, -0.30],  # اسرائیل
+            [-0.75, 0.85, 0.0, -0.70, -0.80],  # آمریکا
+            [0.35, -0.15, -0.65, 0.0, 0.60],  # چین
+            [0.25, -0.25, -0.75, 0.55, 0.0],  # روسیه
+        ],
+        "agents": [
+            dict(
+                name="ایران",
+                res0=1250.0, v=0.72,
+                rho=0.58, d=0.55, f=0.58, chi=1.10,
+                wsec=3.4, winf=2.0, wcost=2.2,
+                lambda_op=0.58, tau=5.0, eps=0.60, income=15.0,
+                eta=1.05, kappa=1.05, pa=2.3, pb=2.4, ra=2.2, rb=2.4,
+                beta=2.2, prefP=1.0, prefS=1.0, prefR=1.2,
+            ),
+            dict(
+                name="اسرائیل",
+                res0=1150.0, v=0.60,
+                rho=0.42, d=0.60, f=0.52, chi=1.05,
+                wsec=3.8, winf=2.0, wcost=2.0,
+                lambda_op=0.62, tau=5.2, eps=0.56, income=16.0,
+                eta=1.18, kappa=0.95, pa=2.7, pb=2.0, ra=2.6, rb=2.1,
+                beta=2.0, prefP=1.1, prefS=1.0, prefR=1.0,
+            ),
+            dict(
+                name="آمریکا",
+                res0=1800.0, v=0.50,
+                rho=0.40, d=0.55, f=0.55, chi=1.00,
+                wsec=3.6, winf=2.1, wcost=2.4,
+                lambda_op=0.70, tau=5.4, eps=0.58, income=20.0,
+                eta=1.25, kappa=0.90, pa=2.8, pb=1.9, ra=2.7, rb=2.0,
+                beta=2.0, prefP=1.1, prefS=0.95, prefR=0.95,
+            ),
+            dict(
+                name="چین",
+                res0=1750.0, v=0.55,
+                rho=0.38, d=0.78, f=0.50, chi=1.00,
+                wsec=2.8, winf=3.2, wcost=2.0,
+                lambda_op=0.62, tau=5.8, eps=0.56, income=19.0,
+                eta=1.20, kappa=0.95, pa=2.7, pb=2.0, ra=2.6, rb=2.1,
+                beta=1.9, prefP=0.95, prefS=1.25, prefR=0.80,
+            ),
+            dict(
+                name="روسیه",
+                res0=1550.0, v=0.62,
+                rho=0.55, d=0.55, f=0.60, chi=1.15,
+                wsec=3.3, winf=1.8, wcost=2.2,
+                lambda_op=0.65, tau=4.9, eps=0.60, income=17.0,
+                eta=1.10, kappa=1.05, pa=2.4, pb=2.3, ra=2.3, rb=2.4,
+                beta=2.1, prefP=0.95, prefS=0.95, prefR=1.15,
+            ),
+        ],
+        "steps_default": 90,
+    }
+
     return scenarios
 
 
 # ==========================================================
 # 2) Custom UI (کاملاً قابل تنظیم)
 # ==========================================================
-def build_custom_ui():
+def build_custom_ui(prefill_agents=None, prefill_W=None, prefill_countries=None, lock_n: bool = False):
     st.subheader("🧰 تنظیمات سفارشی کشورها و تعاملات")
 
-    n = st.slider("تعداد کشورها", min_value=2, max_value=5, value=3, step=1, key="custom_n", help=tip("custom_n"))
+    # --- prefill (برای سناریوهای آماده) ---
+    if prefill_countries is not None:
+        st.session_state.custom_country_names = list(prefill_countries)
+    if prefill_agents is not None:
+        st.session_state.custom_agents = [dict(a) for a in prefill_agents]
+    if prefill_W is not None:
+        W0 = np.array(prefill_W, dtype=float)
+        np.fill_diagonal(W0, 0.0)
+        st.session_state.custom_W = W0
 
+    n_default = 3 if prefill_countries is None else len(prefill_countries)
+    n_min = n_default if lock_n else 2
+    n_max = n_default if lock_n else 5
+    if lock_n:
+        n = int(n_default)
+        st.number_input(
+            "تعداد کشورها",
+            min_value=n,
+            max_value=n,
+            value=n,
+            step=1,
+            key="custom_n_locked",
+            disabled=True,
+            help=tip("custom_n"),
+        )
+    else:
+        n = st.slider(
+            "تعداد کشورها",
+            min_value=int(n_min),
+            max_value=int(n_max),
+            value=int(n_default),
+            step=1,
+            key="custom_n",
+            help=tip("custom_n"),
+        )
     if "custom_country_names" not in st.session_state:
-        st.session_state.custom_country_names = [f"کشور {chr(65+i)}" for i in range(n)]
+        st.session_state.custom_country_names = [f"کشور {chr(65 + i)}" for i in range(n)]
     else:
         cur = st.session_state.custom_country_names
         if len(cur) < n:
-            cur = cur + [f"کشور {chr(65+i)}" for i in range(len(cur), n)]
+            cur = cur + [f"کشور {chr(65 + i)}" for i in range(len(cur), n)]
         elif len(cur) > n:
             cur = cur[:n]
         st.session_state.custom_country_names = cur
@@ -408,7 +548,7 @@ def build_custom_ui():
     for i in range(n):
         with cols[i]:
             st.session_state.custom_country_names[i] = st.text_input(
-                f"نام کشور {i+1}",
+                f"نام کشور {i + 1}",
                 value=st.session_state.custom_country_names[i],
                 key=f"custom_name_{i}",
                 help=tip("country_name"),
@@ -446,53 +586,116 @@ def build_custom_ui():
         with tab:
             st.markdown("### 1) وضعیت و اقتصاد")
             c1, c2, c3, c4 = st.columns(4)
-            cfg["res0"] = c1.number_input("منابع اولیه (res0)", 0.0, 10000.0, float(cfg["res0"]), 50.0, key=f"res0_{i}", help=tip("res0"))
-            cfg["income"] = c2.number_input("درآمد هر گام (μ_c)", 0.0, 200.0, float(cfg["income"]), 1.0, key=f"income_{i}", help=tip("income"))
-            cfg["v"] = c3.slider("آسیب‌پذیری مرزی (v_c)", 0.0, 1.0, float(cfg["v"]), 0.01, key=f"v_{i}", help=tip("v_c"))
-            cfg["chi"] = c4.slider("ضریب هزینه منابع (χ_c)", 0.1, 3.0, float(cfg["chi"]), 0.01, key=f"chi_{i}", help=tip("chi_c"))
+            cfg["res0"] = c1.number_input("منابع اولیه (res0)", 0.0, 10000.0, float(cfg["res0"]), 50.0, key=f"res0_{i}",
+                                          help=tip("res0"))
+            cfg["income"] = c2.number_input("درآمد هر گام (μ_c)", 0.0, 200.0, float(cfg["income"]), 1.0,
+                                            key=f"income_{i}", help=tip("income"))
+            cfg["v"] = c3.slider("آسیب‌پذیری مرزی (v_c)", 0.0, 1.0, float(cfg["v"]), 0.01, key=f"v_{i}",
+                                 help=tip("v_c"))
+            cfg["chi"] = c4.slider("ضریب هزینه منابع (χ_c)", 0.1, 3.0, float(cfg["chi"]), 0.01, key=f"chi_{i}",
+                                   help=tip("chi_c"))
 
             st.markdown("### 2) دکترین (Doctrine)")
             d1, d2, d3 = st.columns(3)
-            cfg["rho"] = d1.slider("ریسک‌پذیری (ρ_c)", 0.0, 1.0, float(cfg["rho"]), 0.01, key=f"rho_{i}", help=tip("rho_c"))
-            cfg["d"] = d2.slider("ترجیح بازدارندگی/نفوذ (d_c)", 0.0, 1.0, float(cfg["d"]), 0.01, key=f"d_{i}", help=tip("d_c"))
+            cfg["rho"] = d1.slider("ریسک‌پذیری (ρ_c)", 0.0, 1.0, float(cfg["rho"]), 0.01, key=f"rho_{i}",
+                                   help=tip("rho_c"))
+            cfg["d"] = d2.slider("ترجیح بازدارندگی/نفوذ (d_c)", 0.0, 1.0, float(cfg["d"]), 0.01, key=f"d_{i}",
+                                 help=tip("d_c"))
             cfg["f"] = d3.slider("آستانه زور (f_c)", 0.0, 1.0, float(cfg["f"]), 0.01, key=f"f_{i}", help=tip("f_c"))
 
             st.markdown("### 3) وزن‌های راهبردی (ω_S)")
+
             w1, w2, w3 = st.columns(3)
-            cfg["wsec"] = w1.number_input("اهمیت امنیت (ω_sec)", 0.1, 10.0, float(cfg["wsec"]), 0.1, key=f"wsec_{i}", help=tip("wsec"))
-            cfg["winf"] = w2.number_input("اهمیت نفوذ (ω_inf)", 0.1, 10.0, float(cfg["winf"]), 0.1, key=f"winf_{i}", help=tip("winf"))
-            cfg["wcost"] = w3.number_input("اهمیت هزینه (ω_cost)", 0.1, 10.0, float(cfg["wcost"]), 0.1, key=f"wcost_{i}", help=tip("wcost"))
+
+            cfg["wsec"] = w1.number_input(
+                "اهمیت امنیت (ω_sec)",
+                0.0, 10.0,
+                float(cfg["wsec"]),
+                0.1,
+                key=f"wsec_{i}",
+                help=tip("wsec"),
+            )
+
+            cfg["winf"] = w2.number_input(
+                "اهمیت نفوذ (ω_inf)",
+                0.0, 10.0,
+                float(cfg["winf"]),
+                0.1,
+                key=f"winf_{i}",
+                help=tip("winf"),
+            )
+
+            cfg["wcost"] = w3.number_input(
+                "اهمیت هزینه (ω_cost)",
+                0.0, 10.0,
+                float(cfg["wcost"]),
+                0.1,
+                key=f"wcost_{i}",
+                help=tip("wcost"),
+            )
+
+            total = cfg["wsec"] + cfg["winf"] + cfg["wcost"]
+
+            if total > 0:
+                p_sec = cfg["wsec"] / total
+                p_inf = cfg["winf"] / total
+                p_cost = cfg["wcost"] / total
+            else:
+                p_sec = p_inf = p_cost = 0
+
+            st.markdown("#### 📊 سهم واقعی هر وزن در تصمیم‌گیری:")
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("سهم امنیت", f"{p_sec * 100:.1f}%")
+            c2.metric("سهم نفوذ", f"{p_inf * 100:.1f}%")
+            c3.metric("سهم هزینه", f"{p_cost * 100:.1f}%")
+
+            st.caption(f"جمع کل وزن‌های وارد شده = {round(total, 2)}")
 
             st.markdown("### 4) عملیاتی (Operational)")
             o1, o2, o3 = st.columns(3)
-            cfg["lambda_op"] = o1.slider("توان تخصیص عملیات (λ_op)", 0.0, 1.0, float(cfg["lambda_op"]), 0.01, key=f"lambdaop_{i}", help=tip("lambda_op"))
-            cfg["tau"] = o2.slider("سرعت/Tempo (τ_c)", 1.0, 15.0, float(cfg["tau"]), 0.1, key=f"tau_{i}", help=tip("tau_c"))
-            cfg["eps"] = o3.slider("آستانه بسیج (ε_c)", 0.0, 1.0, float(cfg["eps"]), 0.01, key=f"eps_{i}", help=tip("eps_c"))
+            cfg["lambda_op"] = o1.slider("توان تخصیص عملیات (λ_op)", 0.0, 1.0, float(cfg["lambda_op"]), 0.01,
+                                         key=f"lambdaop_{i}", help=tip("lambda_op"))
+            cfg["tau"] = o2.slider("سرعت/Tempo (τ_c)", 1.0, 15.0, float(cfg["tau"]), 0.1, key=f"tau_{i}",
+                                   help=tip("tau_c"))
+            cfg["eps"] = o3.slider("حد شروع واکنش شدید (ε_c)", 0.0, 1.0, float(cfg["eps"]), 0.01, key=f"eps_{i}",
+                                   help=tip("eps_c"))
 
-            st.markdown("### 5) تکنیک (Technical)")
-            t1, t2, t3, t4 = st.columns(4)
-            cfg["eta"] = t1.slider("توان فنی (η_c)", 0.2, 3.0, float(cfg["eta"]), 0.01, key=f"eta_{i}", help=tip("eta_c"))
-            cfg["kappa"] = t2.slider("هزینه یادگیری (κ_c)", 0.2, 3.0, float(cfg["kappa"]), 0.01, key=f"kappa_{i}", help=tip("kappa_c"))
-            cfg["pa"] = t3.number_input("موفقیت فرضی (p:α)", 1.0, 10.0, float(cfg["pa"]), 0.1, key=f"pa_{i}", help=tip("p_alpha"))
-            cfg["pb"] = t4.number_input("شکست فرضی (p:β)", 1.0, 10.0, float(cfg["pb"]), 0.1, key=f"pb_{i}", help=tip("p_beta"))
-            r1, r2 = st.columns(2)
-            cfg["ra"] = r1.number_input("پایداری/اطمینان (r:α)", 1.0, 10.0, float(cfg["ra"]), 0.1, key=f"ra_{i}", help=tip("r_alpha"))
-            cfg["rb"] = r2.number_input("خرابی/بی‌ثباتی (r:β)", 1.0, 10.0, float(cfg["rb"]), 0.1, key=f"rb_{i}", help=tip("r_beta"))
-
-            st.markdown("### 6) تاکتیک (Tactical)")
+            st.markdown("### 5) تاکتیک (Tactical)")
             b1, _ = st.columns(2)
-            cfg["beta"] = b1.slider("حساسیت به سود (β_c)", 0.1, 10.0, float(cfg["beta"]), 0.1, key=f"beta_{i}", help=tip("beta_c"))
+            cfg["beta"] = b1.slider("حساسیت به سود (β_c)", 0.1, 10.0, float(cfg["beta"]), 0.1, key=f"beta_{i}",
+                                    help=tip("beta_c"))
             st.caption("ترجیحات ذاتی اقدامات (ω_a): هرچه بزرگ‌تر باشد، آن اقدام بیشتر انتخاب می‌شود.")
             p1, p2, p3 = st.columns(3)
-            cfg["prefP"] = p1.number_input("ترجیح گشت‌زنی (ω_P)", 0.1, 10.0, float(cfg["prefP"]), 0.1, key=f"prefP_{i}", help=tip("prefP"))
-            cfg["prefS"] = p2.number_input("ترجیح سیگنال (ω_S)", 0.1, 10.0, float(cfg["prefS"]), 0.1, key=f"prefS_{i}", help=tip("prefS"))
-            cfg["prefR"] = p3.number_input("ترجیح تقویت/زور (ω_R)", 0.1, 10.0, float(cfg["prefR"]), 0.1, key=f"prefR_{i}", help=tip("prefR"))
+            cfg["prefP"] = p1.number_input("ترجیح آگاهی وضعیتی (ω_P)", 0.1, 10.0, float(cfg["prefP"]), 0.1,
+                                           key=f"prefP_{i}", help=tip("prefP"))
+            cfg["prefS"] = p2.number_input("ترجیح سیگنال (ω_S)", 0.1, 10.0, float(cfg["prefS"]), 0.1, key=f"prefS_{i}",
+                                           help=tip("prefS"))
+            cfg["prefR"] = p3.number_input("ترجیح تقویت/زور (ω_R)", 0.1, 10.0, float(cfg["prefR"]), 0.1,
+                                           key=f"prefR_{i}", help=tip("prefR"))
+
+            st.markdown("### 6) تکنیک (Technical)")
+            t1, t2, t3, t4 = st.columns(4)
+            cfg["eta"] = t1.slider("توان فنی (η_c)", 0.2, 3.0, float(cfg["eta"]), 0.01, key=f"eta_{i}",
+                                   help=tip("eta_c"))
+            cfg["kappa"] = t2.slider("هزینه یادگیری (κ_c)", 0.2, 3.0, float(cfg["kappa"]), 0.01, key=f"kappa_{i}",
+                                     help=tip("kappa_c"))
+            cfg["pa"] = t3.number_input("موفقیت فرضی (p:α)", 1.0, 10.0, float(cfg["pa"]), 0.1, key=f"pa_{i}",
+                                        help=tip("p_alpha"))
+            cfg["pb"] = t4.number_input("شکست فرضی (p:β)", 1.0, 10.0, float(cfg["pb"]), 0.1, key=f"pb_{i}",
+                                        help=tip("p_beta"))
+            r1, r2 = st.columns(2)
+            cfg["ra"] = r1.number_input("پایداری/اطمینان (r:α)", 1.0, 10.0, float(cfg["ra"]), 0.1, key=f"ra_{i}",
+                                        help=tip("r_alpha"))
+            cfg["rb"] = r2.number_input("خرابی/بی‌ثباتی (r:β)", 1.0, 10.0, float(cfg["rb"]), 0.1, key=f"rb_{i}",
+                                        help=tip("r_beta"))
 
         st.session_state.custom_agents[i] = cfg
 
     st.divider()
     st.markdown("### 🔁 ماتریس تعاملات کشورها (W)")
-    st.caption("W[i,j] یعنی کشور i چقدر بیشتر کشور j را هدف می‌گیرد. عدد بین ۰ تا ۱. قطر ماتریس همیشه ۰ است.")
+    st.caption(
+        "W[i,j] رابطه‌ی کشور i با کشور j است. بازه بین -۱ تا +۱: -۱=بیشترین تقابل، +۱=بیشترین همسویی. قطر ماتریس همیشه ۰ است.")
     # راهنما به صورت پاپ‌آپ
     if hasattr(st, "popover"):
         with st.popover("راهنما: W"):
@@ -502,13 +705,13 @@ def build_custom_ui():
             st.write(tip("W"))
 
     if "custom_W" not in st.session_state:
-        W0 = np.ones((n, n), dtype=float) * 0.5
+        W0 = np.zeros((n, n), dtype=float)
         np.fill_diagonal(W0, 0.0)
         st.session_state.custom_W = W0
 
     W = st.session_state.custom_W
     if W.shape != (n, n):
-        W2 = np.ones((n, n), dtype=float) * 0.5
+        W2 = np.zeros((n, n), dtype=float)
         np.fill_diagonal(W2, 0.0)
         st.session_state.custom_W = W2
         W = W2
@@ -517,13 +720,13 @@ def build_custom_ui():
     edited = st.data_editor(W_df, use_container_width=True, key="W_editor", disabled=False)
 
     edited = edited.apply(pd.to_numeric, errors="coerce").fillna(0.0)
-    edited = edited.clip(lower=0.0, upper=1.0)
+    edited = edited.clip(lower=-1.0, upper=1.0)
     np.fill_diagonal(edited.values, 0.0)
     st.session_state.custom_W = edited.values
 
     if st.button("↩️ بازنشانی مقادیر سفارشی به پیش‌فرض", use_container_width=True, help=tip("reset_btn")):
         st.session_state.custom_agents = [default_agent_cfg(c) for c in countries]
-        W2 = np.ones((n, n), dtype=float) * 0.5
+        W2 = np.zeros((n, n), dtype=float)
         np.fill_diagonal(W2, 0.0)
         st.session_state.custom_W = W2
         st.rerun()
@@ -605,15 +808,17 @@ def df_action_counts(df, countries):
             vc = df[col].value_counts().to_dict()
             out.append({
                 "کشور": c,
-                "گشت‌زنی (P)": int(vc.get("P", 0)),
+                "آگاهی وضعیتی (P)": int(vc.get("P", 0)),
                 "سیگنال (S)": int(vc.get("S", 0)),
                 "تقویت/زور (R)": int(vc.get("R", 0)),
             })
     return pd.DataFrame(out)
 
+
 def _resource_norm(x: float) -> float:
     x = float(x)
     return x / (x + 1000.0)
+
 
 def compute_three_indices(df: pd.DataFrame, countries: list[str], window: int = 10):
     df = df.copy()
@@ -638,21 +843,21 @@ def compute_three_indices(df: pd.DataFrame, countries: list[str], window: int = 
         sshare = is_S.rolling(window=window, min_periods=1).mean()
 
         security = (
-            0.45 * (1.0 - df[tcol].astype(float))
-            + 0.35 * rnorm.astype(float)
-            + 0.20 * (1.0 - df[pcol].astype(float))
+                0.45 * (1.0 - df[tcol].astype(float))
+                + 0.35 * rnorm.astype(float)
+                + 0.20 * (1.0 - df[pcol].astype(float))
         ).clip(0, 1)
 
         resilience = (
-            0.55 * rnorm.astype(float)
-            + 0.25 * (1.0 - df[pcol].astype(float))
-            + 0.20 * trend_norm.astype(float)
+                0.55 * rnorm.astype(float)
+                + 0.25 * (1.0 - df[pcol].astype(float))
+                + 0.20 * trend_norm.astype(float)
         ).clip(0, 1)
 
         influence = (
-            0.60 * sshare.astype(float)
-            + 0.25 * (1.0 - df[tcol].astype(float))
-            + 0.15 * (1.0 - df[pcol].astype(float))
+                0.60 * sshare.astype(float)
+                + 0.25 * (1.0 - df[tcol].astype(float))
+                + 0.15 * (1.0 - df[pcol].astype(float))
         ).clip(0, 1)
 
         start_idx = df.index[df["Time"] == 0][0]
@@ -735,21 +940,21 @@ def plot_three_indices_heatmaps(df: pd.DataFrame, countries: list[str], window: 
         sshare = is_S.rolling(window=window, min_periods=1).mean()
 
         security = (
-            0.45 * (1.0 - tension)
-            + 0.35 * rnorm
-            + 0.20 * (1.0 - psi)
+                0.45 * (1.0 - tension)
+                + 0.35 * rnorm
+                + 0.20 * (1.0 - psi)
         ).clip(0, 1)
 
         resilience = (
-            0.55 * rnorm
-            + 0.25 * (1.0 - psi)
-            + 0.20 * trend_norm
+                0.55 * rnorm
+                + 0.25 * (1.0 - psi)
+                + 0.20 * trend_norm
         ).clip(0, 1)
 
         influence = (
-            0.60 * sshare
-            + 0.25 * (1.0 - tension)
-            + 0.15 * (1.0 - psi)
+                0.60 * sshare
+                + 0.25 * (1.0 - tension)
+                + 0.15 * (1.0 - psi)
         ).clip(0, 1)
 
         valid.append(c)
@@ -761,7 +966,7 @@ def plot_three_indices_heatmaps(df: pd.DataFrame, countries: list[str], window: 
         st.info("برای نمایش شاخص‌ها داده کافی وجود ندارد.")
         return
 
-    st.subheader("سه شاخص کلیدی در طول زمان")
+    st.subheader("۳ شاخص کلیدی در طول زمان (نقشه حرارتی)")
     with st.expander("📌 راهنما", expanded=False):
         st.markdown(
             """
@@ -815,11 +1020,12 @@ def build_transition_df(meta, countries):
         # ---- Doctrine ----
         for k, label in [
             ("rho_c", "ریسک‌پذیری (ρ_c)"),
-            ("d_c",   "ترجیح بازدارندگی/نفوذ (d_c)"),
-            ("f_c",   "آستانه زور (f_c)"),
+            ("d_c", "ترجیح بازدارندگی/نفوذ (d_c)"),
+            ("f_c", "آستانه زور (f_c)"),
             ("chi_c", "ضریب هزینه منابع (χ_c)"),
         ]:
-            rows.append({"کشور": c, "بخش": "دکترین", "پارامتر": label, "ابتدا": float(ini.get(k, np.nan)), "انتها": float(fin.get(k, np.nan))})
+            rows.append({"کشور": c, "بخش": "دکترین", "پارامتر": label, "ابتدا": float(ini.get(k, np.nan)),
+                         "انتها": float(fin.get(k, np.nan))})
 
         # ---- Strategic ----
         for idx, label in enumerate(["ω_sec", "ω_inf", "ω_cost"]):
@@ -834,10 +1040,13 @@ def build_transition_df(meta, countries):
             ("eta_c", "توان فنی (η_c)"),
             ("kappa_c", "هزینه یادگیری (κ_c)"),
         ]:
-            rows.append({"کشور": c, "بخش": "تکنیک", "پارامتر": label, "ابتدا": float(ini.get(k, np.nan)), "انتها": float(fin.get(k, np.nan))})
+            rows.append({"کشور": c, "بخش": "تکنیک", "پارامتر": label, "ابتدا": float(ini.get(k, np.nan)),
+                         "انتها": float(fin.get(k, np.nan))})
 
         # ---- Tactical ----
-        rows.append({"کشور": c, "بخش": "تاکتیک", "پارامتر": "حساسیت به سود (β_c)", "ابتدا": float(ini.get("beta_c", np.nan)), "انتها": float(fin.get("beta_c", np.nan))})
+        rows.append(
+            {"کشور": c, "بخش": "تاکتیک", "پارامتر": "حساسیت به سود (β_c)", "ابتدا": float(ini.get("beta_c", np.nan)),
+             "انتها": float(fin.get("beta_c", np.nan))})
         for idx, label in enumerate(["ω_P", "ω_S", "ω_R"]):
             b0 = float(ini.get("omega_a", [np.nan, np.nan, np.nan])[idx])
             b1 = float(fin.get("omega_a", [np.nan, np.nan, np.nan])[idx])
@@ -848,7 +1057,8 @@ def build_transition_df(meta, countries):
             ("tension", "تنش (Tension)"),
             ("resource", "منابع (Resources)"),
         ]:
-            rows.append({"کشور": c, "بخش": "وضعیت", "پارامتر": label, "ابتدا": float(ini.get(k, np.nan)), "انتها": float(fin.get(k, np.nan))})
+            rows.append({"کشور": c, "بخش": "وضعیت", "پارامتر": label, "ابتدا": float(ini.get(k, np.nan)),
+                         "انتها": float(fin.get(k, np.nan))})
 
     return pd.DataFrame(rows)
 
@@ -865,7 +1075,7 @@ def plot_global_escalation(df):
         color_discrete_sequence=["red"],  # 👈 رنگ قرمز
     )
     fig.update_yaxes(range=[0, 1])
-    st.plotly_chart(fig, use_container_width=True,)
+    st.plotly_chart(fig, use_container_width=True, )
 
 
 def plot_lines_by_country(df, countries, prefix, title_fa, y_label_fa):
@@ -983,7 +1193,7 @@ def plot_dyad_tension_heatmap(df: pd.DataFrame, countries: list[str]):
         yaxis_title="زوج کشورها",
         yaxis_autorange="reversed",
         margin=dict(l=30, r=30, t=60, b=30),
-        height=min(900, 120 + 60 * len(y_labels)),
+        height=min(900, 120 + 22 * len(y_labels)),
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -1071,7 +1281,7 @@ def plot_dyad_crisis_heatmap(df: pd.DataFrame, countries: list[str]):
         yaxis_title="زوج کشورها",
         yaxis_autorange="reversed",
         margin=dict(l=30, r=30, t=60, b=30),
-        height=min(900, 120 + 60 * len(y_labels)),
+        height=min(900, 120 + 22 * len(y_labels)),
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -1118,7 +1328,7 @@ def plot_interaction_graph_directed(df, countries):
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        show_edges_P = st.checkbox("نمایش یال‌های گشت‌زنی (P)", value=True, key="edgeP_action", help=tip("edgeP"))
+        show_edges_P = st.checkbox("نمایش یال‌های آگاهی وضعیتی (P)", value=True, key="edgeP_action", help=tip("edgeP"))
     with c2:
         show_edges_S = st.checkbox("نمایش یال‌های سیگنال (S)", value=True, key="edgeS_action", help=tip("edgeS"))
     with c3:
@@ -1144,7 +1354,7 @@ def plot_interaction_graph_directed(df, countries):
     pos = _layout_positions_circle(countries)
 
     act_color = {"P": "green", "S": "orange", "R": "red"}
-    act_name = {"P": "گشت‌زنی (P)", "S": "سیگنال (S)", "R": "تقویت/زور (R)"}
+    act_name = {"P": "آگاهی وضعیتی (P)", "S": "سیگنال (S)", "R": "تقویت/زور (R)"}
 
     palette = px.colors.qualitative.Set2
     country_color = {c: palette[i % len(palette)] for i, c in enumerate(countries)}
@@ -1174,7 +1384,9 @@ def plot_interaction_graph_directed(df, countries):
         for c in countries:
             a = row.get(f"Action_{c}", "P")
             x, y = pos[c]
-            xs.append(x); ys.append(y); texts.append(c)
+            xs.append(x);
+            ys.append(y);
+            texts.append(c)
             fills.append(country_color[c])
             borders.append(act_color.get(a, "white"))
             hovers.append(f"{c}<br>اقدام: {act_name.get(a, a)}")
@@ -1347,7 +1559,55 @@ def main():
         format_func=lambda k: key_to_title[k],
         index=1,
         help=tip("scenario"),
+        key="scenario_choice",
     )
+    _reset_on_scenario_change(chosen)
+
+    # --- Reset all inputs/outputs when switching scenarios ---
+    if "last_scenario" not in st.session_state:
+        st.session_state["last_scenario"] = chosen
+    elif st.session_state["last_scenario"] != chosen:
+        # Keep only the scenario selector state
+        _keep = {"scenario_choice", "last_scenario"}
+        for _k in list(st.session_state.keys()):
+            if _k not in _keep:
+                del st.session_state[_k]
+        st.session_state["last_scenario"] = chosen
+        st.rerun()
+
+    # -----------------------------
+    # ✅ اگر سناریو عوض شد، state ورودی‌ها را ریست کن تا نام کشورها/فیلدها درست آپدیت شوند
+    # (Streamlit مقدار ویجت‌ها را با key نگه می‌دارد؛ پس باید کلیدهای قبلی پاک شوند)
+    if "last_scenario" not in st.session_state:
+        st.session_state["last_scenario"] = chosen
+    elif st.session_state["last_scenario"] != chosen:
+        prefixes = [
+            "custom_name_",
+            "res0_", "income_", "v_", "chi_",
+            "rho_", "d_", "f_",
+            "wsec_", "winf_", "wcost_",
+            "lambdaop_", "tau_", "eps_",
+            "eta_", "kappa_", "pa_", "pb_", "ra_", "rb_",
+            "beta_", "prefP_", "prefS_", "prefR_",
+        ]
+        explicit = {
+            "custom_n",
+            "custom_country_names",
+            "custom_agents",
+            "custom_W",
+            "W_editor",
+            "sim_df",
+            "sim_meta",
+            "has_run",
+        }
+        for k in list(st.session_state.keys()):
+            if (k in explicit) or any(k.startswith(p) for p in prefixes):
+                try:
+                    del st.session_state[k]
+                except Exception:
+                    pass
+        st.session_state["last_scenario"] = chosen
+        st.rerun()
 
     st.sidebar.divider()
     st.sidebar.header("⚙️ تنظیمات اجرا")
@@ -1365,14 +1625,16 @@ def main():
     test_mode = st.sidebar.toggle("حالت تست (Test Mode)", value=False, help=tip("test_mode"))
     seed = None
     if test_mode:
-        seed = st.sidebar.number_input("عدد بذر تصادفی (Seed)", min_value=0, max_value=10_000_000, value=42, step=1, help=tip("seed"))
+        seed = st.sidebar.number_input("عدد بذر تصادفی (Seed)", min_value=0, max_value=10_000_000, value=42, step=1,
+                                       help=tip("seed"))
 
     if chosen != "custom":
         default_steps = scenarios[chosen]["steps_default"]
     else:
         default_steps = 70
 
-    steps = st.sidebar.number_input("تعداد گام‌های زمانی", min_value=10, max_value=200, value=int(default_steps), step=5, help=tip("steps"))
+    steps = st.sidebar.number_input("تعداد گام‌های زمانی", min_value=10, max_value=200, value=int(default_steps),
+                                    step=5, help=tip("steps"))
     run_btn = st.sidebar.button("🚀 اجرای شبیه‌سازی", type="primary", use_container_width=True, help=tip("run_btn"))
 
     # انتخاب سناریو/سفارشی
@@ -1381,9 +1643,14 @@ def main():
         st.sidebar.divider()
         st.sidebar.subheader("📘 توضیح سناریو")
         st.sidebar.markdown(sc["story"])
-        agent_cfgs = sc["agents"]
-        W = sc["W"]
-        countries = sc["countries"]
+
+        # ✅ سناریوهای آماده هم مثل حالت سفارشی قابل مشاهده/ویرایش هستند
+        agent_cfgs, W, countries = build_custom_ui(
+            prefill_agents=sc["agents"],
+            prefill_W=sc["W"],
+            prefill_countries=sc["countries"],
+            lock_n=True,
+        )
     else:
         st.sidebar.info("حالت سفارشی فعال است: پارامترها را تنظیم کنید.")
         agent_cfgs, W, countries = build_custom_ui()
@@ -1435,10 +1702,12 @@ def main():
     plot_dyad_crisis_heatmap(df, countries)
 
     st.divider()
-    plot_lines_by_country(df, countries, prefix="Tension", title_fa="روند تنش کشورها (Tension)", y_label_fa="تنش (Tension)")
+    plot_lines_by_country(df, countries, prefix="Tension", title_fa="روند تنش کشورها (Tension)",
+                          y_label_fa="تنش (Tension)")
 
     st.divider()
-    plot_lines_by_country(df, countries, prefix="Resource", title_fa="روند منابع کشورها (Resources)", y_label_fa="منابع (Resources)")
+    plot_lines_by_country(df, countries, prefix="Resource", title_fa="روند منابع کشورها (Resources)",
+                          y_label_fa="منابع (Resources)")
 
     st.divider()
     plot_lines_by_country(df, countries, prefix="Psi", title_fa="خروجی تشدید کشور (ψ_c)", y_label_fa="ψ_c")
@@ -1468,7 +1737,7 @@ def main():
             options=country_options,
             default=country_options,
             key="filter_countries_params",
-        help=tip("country_filter"),
+            help=tip("country_filter"),
         )
 
         section_options = SECTION_ORDER
