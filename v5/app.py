@@ -911,8 +911,11 @@ def main():
     plot_dyad_tension_heatmap(df, countries)
 
     st.divider()
-    plot_interaction_graph_directed(df, countries)
-
+    if num_runs == 1:
+        plot_interaction_graph_directed(df, countries)
+    else:
+        st.info("💡 گراف تعاملات جهت‌دار در حالت میانگین‌گیری (بیش از ۱ تکرار) غیرفعال است.")
+        
     st.divider()
     st.subheader("تغییر پارامترها (ابتدا → انتها)")
     trans_df = build_transition_df(meta, countries)
