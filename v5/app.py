@@ -840,6 +840,15 @@ def main():
         st.session_state["last_scenario"] = chosen
         st.rerun()
 
+    if chosen != "custom":
+        st.sidebar.divider()
+        st.sidebar.subheader("📘 توضیح سناریو")
+        st.sidebar.markdown(scenarios[chosen]["story"])
+        agent_cfgs, W, countries = build_custom_ui(prefill_agents=scenarios[chosen]["agents"], prefill_W=scenarios[chosen]["W"], prefill_countries=scenarios[chosen]["countries"], lock_n=True)
+    else:
+        st.sidebar.info("حالت سفارشی فعال است: پارامترها را تنظیم کنید.")
+        agent_cfgs, W, countries = build_custom_ui()
+
     st.sidebar.divider()
     st.sidebar.header("⚙️ تنظیمات اجرا")
 
@@ -853,14 +862,6 @@ def main():
     steps = st.sidebar.number_input("تعداد گام‌های زمانی", 10, 200, scenarios.get(chosen, {}).get("steps_default", 70), 5)
     run_btn = st.sidebar.button("🚀 اجرای شبیه‌سازی", type="primary", use_container_width=True)
 
-    if chosen != "custom":
-        st.sidebar.divider()
-        st.sidebar.subheader("📘 توضیح سناریو")
-        st.sidebar.markdown(scenarios[chosen]["story"])
-        agent_cfgs, W, countries = build_custom_ui(prefill_agents=scenarios[chosen]["agents"], prefill_W=scenarios[chosen]["W"], prefill_countries=scenarios[chosen]["countries"], lock_n=True)
-    else:
-        st.sidebar.info("حالت سفارشی فعال است: پارامترها را تنظیم کنید.")
-        agent_cfgs, W, countries = build_custom_ui()
 
     if "sim_df" not in st.session_state: st.session_state.sim_df = None
     if "sim_meta" not in st.session_state: st.session_state.sim_meta = None
