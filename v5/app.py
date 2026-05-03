@@ -457,8 +457,11 @@ def build_custom_ui(prefill_agents=None, prefill_W=None, prefill_countries=None,
     W_df = pd.DataFrame(W, index=countries, columns=countries)
     edited = st.data_editor(W_df, use_container_width=True, key="W_editor")
     edited = edited.apply(pd.to_numeric, errors="coerce").fillna(0.0).clip(lower=-1.0, upper=1.0)
-    np.fill_diagonal(edited.values, 0.0)
-    st.session_state.custom_W = edited.values
+    
+    # FIX: Explicitly create a copy of the array so it's not read-only
+    W_array = edited.to_numpy(dtype=float, copy=True)
+    np.fill_diagonal(W_array, 0.0)
+    st.session_state.custom_W = W_array
 
     if st.button("↩️ بازنشانی مقادیر", use_container_width=True):
         st.session_state.custom_agents = [default_agent_cfg(c) for c in countries]
